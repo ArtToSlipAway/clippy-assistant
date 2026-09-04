@@ -23,6 +23,13 @@ data/uploads/documents/*
 *.sqlite3
 *.csv
 *.log
+*.bak
+*.backup
+*.dump
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Python
 __pycache__/
