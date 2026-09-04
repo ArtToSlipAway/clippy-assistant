@@ -1,0 +1,38 @@
+name: Verify public project
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --requirement requirements.txt
+
+      - name: Check installed dependencies
+        run: python -m pip check
+
+      - name: Compile Python sources
+        run: python -m py_compile *.py
+
+      - name: Validate configuration templates
+        run: |
+          bash -n .env.example
+          python -m json.tool clippy_task_rules.json > /dev/null
