@@ -1,0 +1,77 @@
+{
+  "rules": [
+    {
+      "match": "картина",
+      "type": "project",
+      "plan": true
+    },
+    {
+      "match": "сайт",
+      "type": "project",
+      "plan": true
+    },
+    {
+      "match": "telegram",
+      "type": "project",
+      "plan": true
+    },
+    {
+      "match": "бот",
+      "type": "project",
+      "plan": true
+    },
+    {
+      "match": "эскиз",
+      "type": "project",
+      "plan": true
+    },
+    {
+      "match": "трениров",
+      "type": "habit",
+      "plan": false,
+      "tracking": true
+    },
+    {
+      "match": "сон",
+      "type": "tracking",
+      "plan": false,
+      "tracking": true
+    },
+    {
+      "match": "спать",
+      "type": "tracking",
+      "plan": false,
+      "tracking": true
+    },
+    {
+      "match": "финанс",
+      "type": "tracking",
+      "plan": false,
+      "tracking": true
+    },
+    {
+      "match": "долг",
+      "type": "tracking",
+      "plan": false,
+      "tracking": true
+    },
+    {
+      "match": "сигар",
+      "type": "tracking",
+      "plan": false,
+      "tracking": true
+    },
+    {
+      "match": "анализ целей",
+      "type": "tracking",
+      "plan": false,
+      "tracking": true
+    },
+    {
+      "match": "прогресс целей",
+      "type": "tracking",
+      "plan": false,
+      "tracking": true
+    }
+  ]
+}

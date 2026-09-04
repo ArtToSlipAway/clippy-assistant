@@ -1,0 +1,37 @@
+# Secrets
+.env
+.env.*
+!.env.example
+credentials.json
+google_tasks_credentials.json
+google_tasks_token.json
+data/*.env
+data/*token*
+data/*credentials*
+
+# Runtime state
+data/*
+!data/.gitkeep
+!data/uploads/
+data/uploads/*
+!data/uploads/documents/
+data/uploads/documents/*
+
+# Databases / logs / queues
+*.db
+*.sqlite
+*.sqlite3
+*.csv
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
