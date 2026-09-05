@@ -2114,6 +2114,24 @@ async def ask_assistant(
         "Часовой пояс: Europe/Moscow."
     )
 
+    try:
+        calendar_project_snapshot = get_facts().get(
+            "calendar_project_snapshot",
+            "",
+        )
+    except Exception:
+        calendar_project_snapshot = ""
+
+    if calendar_project_snapshot:
+        runtime_context += (
+            "\n\nАКТУАЛЬНЫЙ СНИМОК ПРОЕКТОВ И ТАТУ-СЕАНСОВ "
+            "ИЗ GOOGLE CALENDAR:\n"
+            + calendar_project_snapshot[:7000]
+            + "\nСобытия этого снимка, включая созданные владельцем "
+            "вручную, считай истинными. Не создавай их повторно и "
+            "не переноси без явной команды владельца."
+        )
+
     if require_plan_proposal:
         runtime_context += (
             "\n\nРЕЖИМ ПЛАН-ПРЕДЛОЖЕНИЕ:\n"

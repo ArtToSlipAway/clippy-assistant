@@ -68,6 +68,11 @@ from google_tasks_tools import (
 from project_next_actions import (
     get_project_actions,
     mark_project_actions_planned,
+    set_project_action_status,
+)
+from nightly_project_sync import (
+    nightly_sync_is_due,
+    sync_calendar_projects,
 )
 
 from bot_tools import (
@@ -244,6 +249,50 @@ def _legacy_event_task_token(
     ).hexdigest()[:12]
 
 
+def _morning_action_id_for_event(
+    day_state: dict,
+    event: dict,
+) -> str:
+    proposal = day_state.get("morning_proposal")
+
+    if not isinstance(proposal, dict):
+        return ""
+
+    if (
+        proposal.get("source") != "project_next_actions"
+        or not proposal.get("applied")
+    ):
+        return ""
+
+    title = str(event.get("title") or "").strip()
+    start_iso = str(event.get("start_iso") or "").strip()
+    end_iso = str(event.get("end_iso") or "").strip()
+
+    if not (title and start_iso and end_iso):
+        return ""
+
+    matches = set()
+
+    for item in proposal.get("items", []):
+        if not isinstance(item, dict) or not item.get("selected"):
+            continue
+        if str(item.get("title") or "").strip() != title:
+            continue
+        if str(item.get("start") or "").strip() != start_iso:
+            continue
+        if str(item.get("end") or "").strip() != end_iso:
+            continue
+
+        action_id = str(item.get("action_id") or "").strip()
+        if action_id:
+            matches.add(action_id)
+
+    if len(matches) != 1:
+        return ""
+
+    return next(iter(matches))
+
+
 def _register_task_events(
     events: list[dict],
     target_date: date,
@@ -290,6 +339,13 @@ def _register_task_events(
             event
         )
 
+        current_task = tasks.get(token, {})
+        if not isinstance(current_task, dict):
+            current_task = {}
+        action_id = str(
+            current_task.get("action_id") or ""
+        ).strip()
+
         calendar_id = str(
             event.get(
                 "calendar_id"
@@ -329,6 +385,10 @@ def _register_task_events(
                     )
                     == event_id
                 ):
+                    if not action_id:
+                        action_id = str(
+                            old_task.get("action_id") or ""
+                        ).strip()
                     if old_token in completed:
                         completed.discard(
                             old_token
@@ -360,7 +420,14 @@ def _register_task_events(
                 token
             )
 
+        if not action_id:
+            action_id = _morning_action_id_for_event(
+                day_state,
+                event,
+            )
+
         tasks[token] = {
+            "action_id": action_id,
             "calendar_id": (
                 event.get(
                     "calendar_id"
@@ -494,6 +561,10 @@ def _toggle_task_token(token: str) -> bool | None:
             or ""
         )
 
+        project_action_id = str(
+            task_info.get("action_id") or ""
+        ).strip()
+
         if (
             task_list_id
             and task_id
@@ -552,6 +623,22 @@ def _toggle_task_token(token: str) -> bool | None:
                     token
                 )
                 is_completed = True
+
+        if project_action_id:
+            try:
+                project_result = set_project_action_status(
+                    project_action_id,
+                    "done" if is_completed else "active",
+                )
+                if not project_result.get("ok"):
+                    logging.error(
+                        "Project action status sync failed: %s",
+                        project_result,
+                    )
+            except Exception:
+                logging.exception(
+                    "Project action status sync failed"
+                )
 
         day_state[
             "completed"
@@ -2510,7 +2597,8 @@ def _build_morning_project_proposal(
 ) -> dict:
 
     source = get_project_actions(
-        active_only=True
+        active_only=True,
+        target_date=target_date,
     )
 
     actions = (
@@ -2777,6 +2865,7 @@ def _build_morning_project_proposal(
 
 def _find_morning_item(
     token: str,
+    proposal_date: date | None = None,
 ) -> tuple[
     date,
     dict,
@@ -2787,13 +2876,18 @@ def _find_morning_item(
         _load_daily_routine_state()
     )
 
-    for (
-        raw_date,
-        day_state,
-    ) in payload.get(
+    days = payload.get(
         "days",
         {},
-    ).items():
+    )
+
+    if proposal_date is not None:
+        raw_dates = [proposal_date.isoformat()]
+    else:
+        raw_dates = sorted(days.keys(), reverse=True)
+
+    for raw_date in raw_dates:
+        day_state = days.get(raw_date)
 
         if not isinstance(
             day_state,
@@ -2845,6 +2939,21 @@ def _find_morning_item(
                 )
 
     return None
+
+
+def _decode_morning_item_key(
+    raw_value: str,
+) -> tuple[date | None, str]:
+    raw_value = str(raw_value or "")
+    parts = raw_value.split(":", 1)
+
+    if len(parts) == 2:
+        try:
+            return date.fromisoformat(parts[0]), parts[1]
+        except ValueError:
+            pass
+
+    return None, raw_value
 
 
 def _update_morning_item(
@@ -2982,6 +3091,8 @@ def morning_approval_keyboard(
                 ),
                 callback_data=(
                     "morning_select:"
+                    + proposal_date.isoformat()
+                    + ":"
                     + str(
                         item.get(
                             "token"
@@ -3062,6 +3173,8 @@ def morning_approval_keyboard(
                 ),
                 callback_data=(
                     "morning_move:"
+                    + proposal_date.isoformat()
+                    + ":"
                     + str(
                         item.get(
                             "token"
@@ -3090,7 +3203,10 @@ def morning_approval_keyboard(
 
 def _morning_date_keyboard(
     token: str,
+    proposal_date: date,
 ) -> InlineKeyboardMarkup:
+
+    item_key = proposal_date.isoformat() + ":" + token
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -3098,13 +3214,13 @@ def _morning_date_keyboard(
                 InlineKeyboardButton(
                     text="Сегодня",
                     callback_data=(
-                        f"morning_date:{token}:0"
+                        f"morning_date:{item_key}:0"
                     ),
                 ),
                 InlineKeyboardButton(
                     text="Завтра",
                     callback_data=(
-                        f"morning_date:{token}:1"
+                        f"morning_date:{item_key}:1"
                     ),
                 ),
             ],
@@ -3112,13 +3228,13 @@ def _morning_date_keyboard(
                 InlineKeyboardButton(
                     text="+2 дня",
                     callback_data=(
-                        f"morning_date:{token}:2"
+                        f"morning_date:{item_key}:2"
                     ),
                 ),
                 InlineKeyboardButton(
                     text="+3 дня",
                     callback_data=(
-                        f"morning_date:{token}:3"
+                        f"morning_date:{item_key}:3"
                     ),
                 ),
             ],
@@ -3126,7 +3242,7 @@ def _morning_date_keyboard(
                 InlineKeyboardButton(
                     text="+7 дней",
                     callback_data=(
-                        f"morning_date:{token}:7"
+                        f"morning_date:{item_key}:7"
                     ),
                 ),
             ],
@@ -3134,7 +3250,7 @@ def _morning_date_keyboard(
                 InlineKeyboardButton(
                     text="← Назад",
                     callback_data=(
-                        f"morning_back:{token}"
+                        f"morning_back:{item_key}"
                     ),
                 ),
             ],
@@ -3348,6 +3464,29 @@ async def daily_routine_loop(bot: Bot) -> None:
                     )
 
         await asyncio.sleep(30)
+
+
+async def nightly_project_sync_loop() -> None:
+    while True:
+        now = datetime.now(MOSCOW_TZ)
+        try:
+            due = await asyncio.to_thread(
+                nightly_sync_is_due,
+                now,
+            )
+            if due:
+                result = await asyncio.to_thread(
+                    sync_calendar_projects,
+                    now,
+                )
+                logging.info(
+                    "Nightly project sync complete: %s",
+                    result,
+                )
+        except Exception:
+            logging.exception("Nightly project sync failed")
+
+        await asyncio.sleep(60)
 
 
 def _brief_last_sent_date() -> str:
@@ -4415,13 +4554,18 @@ async def calendar_confirmation(
     ).startswith(
         "morning_select:"
     ):
-        token = callback.data.split(
+        raw_item_key = callback.data.split(
             ":",
             1,
         )[1]
 
+        proposal_date_hint, token = _decode_morning_item_key(
+            raw_item_key
+        )
+
         found = _find_morning_item(
-            token
+            token,
+            proposal_date_hint,
         )
 
         if not found:
@@ -4475,14 +4619,18 @@ async def calendar_confirmation(
     ).startswith(
         "morning_move:"
     ):
-        token = callback.data.split(
+        raw_item_key = callback.data.split(
             ":",
             1,
         )[1]
 
-        if not _find_morning_item(
-            token
-        ):
+        proposal_date_hint, token = _decode_morning_item_key(
+            raw_item_key
+        )
+
+        found = _find_morning_item(token, proposal_date_hint)
+
+        if not found:
             await callback.answer(
                 "Предложение уже не найдено",
                 show_alert=True,
@@ -4493,7 +4641,8 @@ async def calendar_confirmation(
             await callback.message.edit_reply_markup(
                 reply_markup=(
                     _morning_date_keyboard(
-                        token
+                        token,
+                        found[0],
                     )
                 )
             )
@@ -4511,13 +4660,18 @@ async def calendar_confirmation(
     ).startswith(
         "morning_back:"
     ):
-        token = callback.data.split(
+        raw_item_key = callback.data.split(
             ":",
             1,
         )[1]
 
+        proposal_date_hint, token = _decode_morning_item_key(
+            raw_item_key
+        )
+
         found = _find_morning_item(
-            token
+            token,
+            proposal_date_hint,
         )
 
         if found and callback.message:
@@ -4543,15 +4697,19 @@ async def calendar_confirmation(
         "morning_date:"
     ):
         try:
-            _prefix, token, raw_offset = (
+            raw_item_key, raw_offset = (
                 callback.data.split(
                     ":",
-                    2,
-                )
+                    1,
+                )[1].rsplit(":", 1)
             )
 
             offset = int(
                 raw_offset
+            )
+
+            proposal_date_hint, token = _decode_morning_item_key(
+                raw_item_key
             )
 
         except Exception:
@@ -4562,7 +4720,8 @@ async def calendar_confirmation(
             return
 
         found = _find_morning_item(
-            token
+            token,
+            proposal_date_hint,
         )
 
         if not found:
@@ -4579,7 +4738,7 @@ async def calendar_confirmation(
         ) = found
 
         target_date = (
-            proposal_date
+            datetime.now(MOSCOW_TZ).date()
             + timedelta(
                 days=offset
             )
@@ -4723,6 +4882,16 @@ async def calendar_confirmation(
             )
             return
 
+        if proposal_date < datetime.now(MOSCOW_TZ).date():
+            await callback.answer(
+                (
+                    "Это предложение устарело. "
+                    "Запусти /test_morning ещё раз."
+                ),
+                show_alert=True,
+            )
+            return
+
         selected = [
             item
             for item in proposal.get(
@@ -4861,6 +5030,7 @@ async def calendar_confirmation(
         await asyncio.to_thread(
             mark_project_actions_planned,
             action_ids,
+            proposal_date,
         )
 
         proposal[
@@ -8105,11 +8275,19 @@ async def main():
     client_delivery_task = asyncio.create_task(
         client_message_delivery_loop()
     )
+    project_sync_task = asyncio.create_task(
+        nightly_project_sync_loop()
+    )
 
     try:
         await dp.start_polling(bot)
     finally:
-        tasks = (brief_task, routine_task, client_delivery_task)
+        tasks = (
+            brief_task,
+            routine_task,
+            client_delivery_task,
+            project_sync_task,
+        )
         for task in tasks:
             task.cancel()
         for task in tasks:

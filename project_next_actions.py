@@ -405,9 +405,19 @@ def sync_project_actions(
 def get_project_actions(
     *,
     active_only: bool = True,
+    target_date=None,
 ) -> dict:
 
     payload = _load_store()
+
+    target_date_iso = None
+
+    if target_date is not None:
+        target_date_iso = (
+            target_date.isoformat()
+            if hasattr(target_date, "isoformat")
+            else str(target_date).strip()
+        )
 
     flattened = []
 
@@ -451,18 +461,32 @@ def get_project_actions(
                 {},
             )
 
+            planned_entry = planned.get(action_id)
+            planned_for = None
+
+            if isinstance(planned_entry, dict):
+                planned_for = str(
+                    planned_entry.get("planned_for") or ""
+                ).strip() or None
+
+                if not planned_for:
+                    planned_at = str(
+                        planned_entry.get("planned_at") or ""
+                    ).strip()
+                    if len(planned_at) >= 10:
+                        planned_for = planned_at[:10]
+
             if (
                 active_only
-                and (
-                    action.get(
-                        "status"
-                    )
-                    != "active"
-                    or action_id
-                    in planned
-                )
+                and action.get("status") != "active"
             ):
                 continue
+
+            if active_only and planned_entry:
+                if target_date_iso is None:
+                    continue
+                if planned_for == target_date_iso:
+                    continue
 
             row = dict(action)
 
@@ -544,8 +568,51 @@ def get_project_actions(
 
 
 
+def set_project_action_status(
+    action_id: str,
+    status: str,
+) -> dict:
+    action_id = str(action_id or "").strip()
+    status = str(status or "").strip().casefold()
+
+    if not action_id:
+        return {"ok": False, "error": "missing_action_id"}
+
+    if status not in {"active", "paused", "done"}:
+        return {"ok": False, "error": "invalid_status"}
+
+    payload = _load_store()
+
+    for source in payload.get("sources", {}).values():
+        if not isinstance(source, dict):
+            continue
+        for action in source.get("actions", []):
+            if not isinstance(action, dict):
+                continue
+            if str(action.get("action_id") or "").strip() != action_id:
+                continue
+
+            previous_status = action.get("status") or "active"
+            action["status"] = status
+            _save_store(payload)
+            return {
+                "ok": True,
+                "action_id": action_id,
+                "previous_status": previous_status,
+                "status": status,
+                "changed": previous_status != status,
+            }
+
+    return {
+        "ok": False,
+        "error": "action_not_found",
+        "action_id": action_id,
+    }
+
+
 def mark_project_actions_planned(
     action_ids: list[str],
+    target_date=None,
 ) -> dict:
 
     cleaned = {
@@ -569,9 +636,20 @@ def mark_project_actions_planned(
 
     now = _now_iso()
 
+    planned_for = (
+        target_date.isoformat()
+        if target_date is not None and hasattr(target_date, "isoformat")
+        else (
+            str(target_date).strip()
+            if target_date is not None
+            else now[:10]
+        )
+    )
+
     for action_id in cleaned:
         planned[action_id] = {
             "planned_at": now,
+            "planned_for": planned_for,
         }
 
     _save_store(
