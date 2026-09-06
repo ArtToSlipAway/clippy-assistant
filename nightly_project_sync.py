@@ -169,7 +169,7 @@ def _tattoo_sketch_action(event: dict, today: date) -> dict:
         "priority": "high",
         "estimated_minutes": 120,
         "preferred_date": preparation_date.isoformat(),
-        "not_before": preparation_date.isoformat(),
+        "not_before": today.isoformat(),
         "note": (
             "Источник истины — Google Calendar. После завершения добавь "
             "«Эскиз готов» в название или описание тату-сеанса. "

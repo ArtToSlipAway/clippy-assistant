@@ -32,6 +32,9 @@ jobs:
       - name: Compile Python sources
         run: python -m py_compile *.py
 
+      - name: Test sketch preparation and morning proposals
+        run: python -m unittest test_nightly_project_sync.py
+
       - name: Validate configuration templates
         run: |
           bash -n .env.example

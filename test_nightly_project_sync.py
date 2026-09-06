@@ -1,9 +1,12 @@
+import ast
+import hashlib
 import json
 import os
 import sys
 import types
 import unittest
-from datetime import datetime
+from datetime import date, datetime, timedelta
+from pathlib import Path
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
@@ -42,6 +45,59 @@ def _event(event_id, summary, start, end, description=""):
 
 
 class NightlyProjectSyncTests(unittest.TestCase):
+    def morning_proposal(self, action, target, *, events=None, free_slot=True):
+        # Load the real planner without starting Telegram/background loops.
+        tree = ast.parse(Path(__file__).with_name("bot.py").read_text())
+        function = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "_build_morning_project_proposal"
+        )
+        start = datetime.combine(target, datetime.min.time(), tzinfo=TZ)
+        namespace = {
+            "date": date, "datetime": datetime, "hashlib": hashlib,
+            "MOSCOW_TZ": TZ, "TATTOO_ACTION_SOURCE": sync.TATTOO_ACTION_SOURCE,
+            "get_project_actions": lambda **_: {"ok": True, "actions": [action]},
+            "_normalize_morning_title": lambda value: value.casefold().strip(),
+            "classify_task": lambda _: {"plan": True},
+            "_morning_find_slot": lambda *_: (
+                {"start": start, "end": start + timedelta(hours=2)}
+                if free_slot else None
+            ),
+            "_save_morning_proposal": lambda *_: None,
+        }
+        exec(compile(ast.Module(body=[function], type_ignores=[]), "bot.py", "exec"), namespace)
+        return namespace[function.name](target, events or [])
+
+    def test_distant_session_can_be_proposed_today_without_auto_booking(self):
+        target = date(2026, 9, 7)
+        event = _event("future", "Тату-сеанс — Тест", "2026-09-19T10:00:00+03:00",
+                       "2026-09-19T19:00:00+03:00")
+        action = sync._tattoo_sketch_action(event, target)
+        action["source_chat"] = sync.TATTOO_ACTION_SOURCE
+        self.assertEqual(action["preferred_date"], "2026-09-16")
+        proposal = self.morning_proposal(action, target)
+        self.assertEqual(len(proposal["items"]), 1)
+        self.assertEqual(proposal["items"][0]["estimated_minutes"], 120)
+        self.assertFalse(proposal["items"][0]["selected"])
+        self.assertFalse(proposal["applied"])
+
+    def test_early_sketch_keeps_other_planning_guards(self):
+        target = date(2026, 9, 7)
+        event = _event("future", "Тату-сеанс — Тест", "2026-09-19T10:00:00+03:00",
+                       "2026-09-19T19:00:00+03:00")
+        action = sync._tattoo_sketch_action(event, target)
+        action["source_chat"] = sync.TATTOO_ACTION_SOURCE
+        cases = [
+            ("ordinary future project", {**action, "source_chat": "ordinary"}, {}),
+            ("explicit not_before", {**action, "not_before": "2026-09-08"}, {}),
+            ("already in calendar", action, {"events": [{"title": action["title"]}]}),
+            ("no free slot", action, {"free_slot": False}),
+        ]
+        for label, candidate, kwargs in cases:
+            with self.subTest(label):
+                self.assertEqual(self.morning_proposal(candidate, target, **kwargs)["items"], [])
+
     def setUp(self):
         os.environ["GOOGLE_PROJECTS_CALENDAR_ID"] = "projects"
         os.environ["GOOGLE_PERSONAL_CALENDAR_ID"] = "personal"
