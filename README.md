@@ -33,24 +33,31 @@ Clippy — не просто Telegram-обёртка над LLM. Ассисте�
 
 ## Архитектура
 
-```text
-Telegram
-   │
-   ▼
- bot.py
-   │
-   ▼
-ai_agent.py ───────── OpenAI API
-   │
-   ├── Google Calendar
-   ├── Google Tasks
-   ├── SQLite Memory
-   ├── Projects / Next Actions
-   ├── Creative Knowledge
-   ├── Voice Tools
-   └── Clippy HTTP Gateway
-                 │
-                 └── External integrations
+```mermaid
+flowchart TD
+    U["Владелец в Telegram"] --> B["bot.py · проверка доступа"]
+    B --> A["ai_agent.py · диалог и выбор инструмента"]
+    A <--> O["OpenAI API"]
+    A --> T["Python tools · проверка аргументов"]
+    T <--> C["Google Calendar"]
+    T <--> G["Google Tasks"]
+    T <--> M["SQLite · память"]
+    T <--> P["Проекты и следующие действия"]
+    T --> K["Творческая база знаний"]
+    B <--> V["Голос · распознавание и синтез"]
+    T --> R["Результат действия"]
+    R --> A
+    A --> B
+    B --> U
+    N["Ночная синхронизация"] --> C
+    N --> S["Подготовка задач на эскизы к тату-сеансам"]
+    S --> P
+    P --> D["Утреннее предложение свободных слотов"]
+    D --> B
+    X["Внешние интеграции"] --> H["HTTP gateway · проверка API key"]
+    H --> C
+    H --> M
+    H --> P
 ```
 
 Основной Telegram-процесс и HTTP gateway запускаются независимо. Runtime state
