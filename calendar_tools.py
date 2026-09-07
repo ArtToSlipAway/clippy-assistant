@@ -2490,6 +2490,13 @@ def _plan_action_calendar_id(
         or ""
     ).strip().lower()
 
+    if calendar_kind in {
+        "personal",
+        "personal_task",
+        "task",
+    }:
+        return personal_id
+
     # Явная маршрутизация от AI.
     if calendar_kind in {
         "tattoo",
