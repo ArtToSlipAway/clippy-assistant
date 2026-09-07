@@ -2,7 +2,7 @@ import ast
 import sys
 import types
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -14,7 +14,7 @@ def load_functions(filename, names):
         for node in tree.body
         if isinstance(node, ast.FunctionDef) and node.name in names
     ]
-    namespace = {"date": date}
+    namespace = {"date": date, "timedelta": timedelta}
     exec(compile(ast.Module(body=nodes, type_ignores=[]), filename, "exec"), namespace)
     return namespace
 
@@ -25,6 +25,7 @@ bot_functions = load_functions(
         "missing_confirmation_button_followup",
         "contextual_confirmation",
         "calendar_confirmation_markup_needed",
+        "_morning_candidate_dates",
     },
 )
 calendar_functions = load_functions(
@@ -43,6 +44,46 @@ google_task_functions = load_functions(
 
 
 class CalendarConfirmationTests(unittest.TestCase):
+    def test_tattoo_sketch_searches_until_preferred_date(self):
+        candidate_dates = bot_functions["_morning_candidate_dates"]
+        namespace = candidate_dates.__globals__
+        namespace["TATTOO_ACTION_SOURCE"] = "tattoo-sketches"
+
+        result = candidate_dates(
+            {
+                "source_chat": "tattoo-sketches",
+                "preferred_date": "2026-09-10",
+            },
+            date(2026, 9, 7),
+        )
+
+        self.assertEqual(
+            result,
+            [
+                date(2026, 9, 7),
+                date(2026, 9, 8),
+                date(2026, 9, 9),
+                date(2026, 9, 10),
+            ],
+        )
+
+    def test_regular_action_stays_on_proposal_date(self):
+        candidate_dates = bot_functions["_morning_candidate_dates"]
+        candidate_dates.__globals__["TATTOO_ACTION_SOURCE"] = (
+            "tattoo-sketches"
+        )
+
+        self.assertEqual(
+            candidate_dates(
+                {
+                    "source_chat": "ChatGPT project",
+                    "preferred_date": "2026-09-10",
+                },
+                date(2026, 9, 7),
+            ),
+            [date(2026, 9, 7)],
+        )
+
     def test_plain_yes_is_contextual_confirmation(self):
         confirm = bot_functions["contextual_confirmation"]
         self.assertTrue(confirm("да", True))
