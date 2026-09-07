@@ -717,28 +717,9 @@ def get_day_overview(
     # dependency cycle used by the combined day overview.
     from calendar_tools import get_day_schedule
 
-    calendar_events = get_day_schedule(
+    combined = get_day_schedule(
         target_date
     )
-
-    try:
-        google_tasks = (
-            get_google_tasks_for_date(
-                target_date
-            )
-        )
-    except Exception:
-        logging.exception(
-            "Google Tasks read failed; "
-            "calendar-only fallback"
-        )
-        google_tasks = []
-
-    # Tasks первыми, как all-day пункты.
-    combined = [
-        *google_tasks,
-        *calendar_events,
-    ]
 
     return sorted(
         combined,
