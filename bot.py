@@ -6699,6 +6699,52 @@ def saved_plan_apply_followup(
     )
 
 
+def missing_confirmation_button_followup(
+    text: str,
+) -> bool:
+    value = " ".join(
+        (text or "")
+        .lower()
+        .replace("ё", "е")
+        .split()
+    )
+
+    return any(
+        phrase in value
+        for phrase in (
+            "нет кнопки",
+            "кнопка не пришла",
+            "кнопки не пришли",
+            "не вижу кнопку",
+            "не вижу кнопки",
+        )
+    )
+
+
+def contextual_confirmation(
+    normalized_text: str,
+    has_confirmable_action: bool,
+) -> bool:
+    return (
+        has_confirmable_action
+        and normalized_text in {
+            "да",
+            "ага",
+            "давай",
+        }
+    )
+
+
+def calendar_confirmation_markup_needed(
+    has_pending_calendar_changes: bool,
+    has_saved_plan: bool,
+) -> bool:
+    return (
+        has_pending_calendar_changes
+        or has_saved_plan
+    )
+
+
 async def apply_saved_plan_from_followup(message: Message) -> str:
     prepared = await asyncio.to_thread(
         prepare_saved_plan_for_confirmation
@@ -6769,6 +6815,8 @@ async def process_owner_text(
         "применяй план",
         "примени план",
         "примени этот план",
+        "применяй перенос",
+        "примени перенос",
         "да применяй",
         "да делаем",
         "делаем",
@@ -6780,9 +6828,28 @@ async def process_owner_text(
         "не надо",
     }
 
-    if normalized in confirm_words:
+    pending_client_message = (
+        has_pending_client_message()
+    )
+    pending_calendar_changes = (
+        has_pending_changes()
+    )
+    saved_plan = get_saved_plan_proposal()
+    has_confirmable_action = (
+        pending_client_message
+        or pending_calendar_changes
+        or bool(saved_plan)
+    )
 
-        if has_pending_client_message():
+    if (
+        normalized in confirm_words
+        or contextual_confirmation(
+            normalized,
+            has_confirmable_action,
+        )
+    ):
+
+        if pending_client_message:
             result = await asyncio.to_thread(
                 confirm_pending_client_message
             )
@@ -6858,6 +6925,24 @@ async def process_owner_text(
             reply_text
         )
 
+        return reply_text
+
+    if (
+        has_confirmable_action
+        and missing_confirmation_button_followup(text)
+    ):
+        reply_text = (
+            "Вот кнопки для сохранённого изменения. "
+            "Календарь изменится только после подтверждения."
+        )
+        await message.answer(
+            reply_text,
+            reply_markup=(
+                client_message_confirm_kb()
+                if pending_client_message
+                else calendar_confirm_kb()
+            ),
+        )
         return reply_text
 
     if (
@@ -7011,21 +7096,25 @@ async def process_owner_text(
     if has_pending_client_message():
         clear_pending_client_message()
 
-    if (
-        (
-            has_pending_changes()
-            or get_saved_plan_proposal()
-        )
-        and not booking_followup
-    ):
-        clear_pending_changes()
-        clear_saved_plan_proposal()
-
     planning_request = (
         is_planning_request(
             text
         )
     )
+
+    # Replace an old proposal only when the owner starts another calendar
+    # mutation or asks for a new plan. Ordinary follow-ups must not silently
+    # discard the confirmation that is still waiting.
+    if (
+        has_confirmable_action
+        and not booking_followup
+        and (
+            planning_request
+            or calendar_changes_allowed_for_text(text)
+        )
+    ):
+        clear_pending_changes()
+        clear_saved_plan_proposal()
 
     if planning_request:
         clear_saved_plan_proposal()
@@ -7109,9 +7198,9 @@ async def process_owner_text(
             answer,
             reply_markup=client_message_confirm_kb(),
         )
-    elif (
-        allow_calendar_changes
-        and has_pending_changes()
+    elif calendar_confirmation_markup_needed(
+        has_pending_changes(),
+        bool(get_saved_plan_proposal()),
     ):
         await message.answer(
             answer,
