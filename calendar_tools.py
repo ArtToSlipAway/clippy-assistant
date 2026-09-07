@@ -441,6 +441,29 @@ def _linked_google_task_meta(
     }
 
 
+def classify_existing_calendar_event(
+    calendar_name: str,
+    title: str,
+    event: dict,
+) -> str:
+    """Classify a stored event using both its title and Clippy metadata."""
+
+    planning_type = classify_planning_event(
+        calendar_name,
+        title,
+    )
+
+    # A Calendar block linked to Google Tasks is a task even when its
+    # user-written title has no keyword from the flexible allowlist.
+    if (
+        calendar_name == "Личный"
+        and _linked_google_task_meta(event)
+    ):
+        return "flexible"
+
+    return planning_type
+
+
 def _mark_linked_task_event(
     event: dict,
     task_list_id: str,
@@ -588,9 +611,10 @@ def get_day_schedule(
                 "Без названия",
             ))
 
-            planning_type = classify_planning_event(
+            planning_type = classify_existing_calendar_event(
                 calendar_name,
                 event_title,
+                event,
             )
 
             linked_task = (
@@ -3065,9 +3089,10 @@ def prepare_saved_plan_for_confirmation():
                 item["title"],
             )
 
-            planning_type = classify_planning_event(
+            planning_type = classify_existing_calendar_event(
                 "Личный",
                 current_title,
+                event,
             )
 
             if planning_type not in {
@@ -3177,9 +3202,10 @@ def prepare_saved_plan_for_confirmation():
             )
 
             planning_type = (
-                classify_planning_event(
+                classify_existing_calendar_event(
                     "Личный",
                     current_title,
+                    event,
                 )
             )
 
