@@ -2592,6 +2592,42 @@ def _get_morning_proposal(
     return proposal
 
 
+def _morning_candidate_dates(
+    action: dict,
+    proposal_date: date,
+) -> list[date]:
+    """Return dates that may host a project action.
+
+    Ordinary project actions stay in the current morning plan.  Tattoo
+    sketches are different: the session may be weeks away and a busy day
+    must not make the preparation disappear from the proposal entirely.
+    """
+
+    if action.get("source_chat") != TATTOO_ACTION_SOURCE:
+        return [proposal_date]
+
+    search_end = proposal_date + timedelta(days=60)
+    preferred_raw = str(action.get("preferred_date") or "").strip()
+
+    if preferred_raw:
+        try:
+            preferred = date.fromisoformat(preferred_raw)
+            if preferred >= proposal_date:
+                search_end = min(search_end, preferred)
+            else:
+                search_end = min(
+                    search_end,
+                    proposal_date + timedelta(days=7),
+                )
+        except ValueError:
+            pass
+
+    return [
+        proposal_date + timedelta(days=offset)
+        for offset in range((search_end - proposal_date).days + 1)
+    ]
+
+
 def _build_morning_project_proposal(
     target_date: date,
     events: list[dict],
@@ -2755,11 +2791,23 @@ def _build_morning_project_proposal(
             or 60
         )
 
-        slot = _morning_find_slot(
+        slot = None
+        slot_date = target_date
+
+        for candidate_date in _morning_candidate_dates(
+            action,
             target_date,
-            duration,
-            reserved,
-        )
+        ):
+            candidate_slot = _morning_find_slot(
+                candidate_date,
+                duration,
+                reserved,
+            )
+
+            if candidate_slot:
+                slot = candidate_slot
+                slot_date = candidate_date
+                break
 
         if not slot:
             continue
@@ -2827,7 +2875,7 @@ def _build_morning_project_proposal(
                 int(duration)
             ),
             "target_date": (
-                target_date.isoformat()
+                slot_date.isoformat()
             ),
             "start": (
                 start.isoformat()
@@ -5020,21 +5068,29 @@ async def calendar_confirmation(
             )
             return
 
-        action_ids = [
-            str(
-                item.get(
-                    "action_id"
-                )
-                or ""
-            )
-            for item in selected
-        ]
+        action_ids_by_date = {}
 
-        await asyncio.to_thread(
-            mark_project_actions_planned,
-            action_ids,
-            proposal_date,
-        )
+        for item in selected:
+            try:
+                planned_for = date.fromisoformat(
+                    str(item.get("target_date") or "")
+                )
+            except ValueError:
+                planned_for = proposal_date
+
+            action_id = str(item.get("action_id") or "").strip()
+            if action_id:
+                action_ids_by_date.setdefault(
+                    planned_for,
+                    [],
+                ).append(action_id)
+
+        for planned_for, action_ids in action_ids_by_date.items():
+            await asyncio.to_thread(
+                mark_project_actions_planned,
+                action_ids,
+                planned_for,
+            )
 
         proposal[
             "applied"

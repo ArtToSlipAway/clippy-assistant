@@ -48,14 +48,18 @@ class NightlyProjectSyncTests(unittest.TestCase):
     def morning_proposal(self, action, target, *, events=None, free_slot=True):
         # Load the real planner without starting Telegram/background loops.
         tree = ast.parse(Path(__file__).with_name("bot.py").read_text())
-        function = next(
+        functions = [
             node for node in tree.body
             if isinstance(node, ast.FunctionDef)
-            and node.name == "_build_morning_project_proposal"
-        )
+            and node.name in {
+                "_morning_candidate_dates",
+                "_build_morning_project_proposal",
+            }
+        ]
         start = datetime.combine(target, datetime.min.time(), tzinfo=TZ)
         namespace = {
             "date": date, "datetime": datetime, "hashlib": hashlib,
+            "timedelta": timedelta,
             "MOSCOW_TZ": TZ, "TATTOO_ACTION_SOURCE": sync.TATTOO_ACTION_SOURCE,
             "get_project_actions": lambda **_: {"ok": True, "actions": [action]},
             "_normalize_morning_title": lambda value: value.casefold().strip(),
@@ -66,8 +70,8 @@ class NightlyProjectSyncTests(unittest.TestCase):
             ),
             "_save_morning_proposal": lambda *_: None,
         }
-        exec(compile(ast.Module(body=[function], type_ignores=[]), "bot.py", "exec"), namespace)
-        return namespace[function.name](target, events or [])
+        exec(compile(ast.Module(body=functions, type_ignores=[]), "bot.py", "exec"), namespace)
+        return namespace["_build_morning_project_proposal"](target, events or [])
 
     def test_distant_session_can_be_proposed_today_without_auto_booking(self):
         target = date(2026, 9, 7)
