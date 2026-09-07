@@ -492,6 +492,34 @@ def classify_existing_calendar_event(
     return planning_type
 
 
+def standalone_google_tasks(
+    tasks: list[dict],
+    calendar_events: list[dict],
+) -> list[dict]:
+    """Hide all-day Task rows that already have a timed Calendar block."""
+
+    linked_keys = {
+        (
+            str(event.get("task_list_id") or ""),
+            str(event.get("task_id") or ""),
+        )
+        for event in calendar_events
+        if event.get("source") == "linked_google_task"
+        and event.get("task_list_id")
+        and event.get("task_id")
+    }
+
+    return [
+        task
+        for task in tasks
+        if (
+            str(task.get("task_list_id") or ""),
+            str(task.get("task_id") or task.get("id") or ""),
+        )
+        not in linked_keys
+    ]
+
+
 def _mark_linked_task_event(
     event: dict,
     task_list_id: str,
@@ -761,7 +789,10 @@ def get_day_schedule(
     except Exception:
         google_tasks = []
 
-    for task in google_tasks:
+    for task in standalone_google_tasks(
+        google_tasks,
+        result,
+    ):
         result.append({
             "calendar": "Google Tasks",
             "calendar_id": "google_tasks",
