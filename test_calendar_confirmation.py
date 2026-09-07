@@ -29,6 +29,7 @@ calendar_functions = load_functions(
         "classify_planning_event",
         "_linked_google_task_meta",
         "classify_existing_calendar_event",
+        "standalone_google_tasks",
     },
 )
 
@@ -96,6 +97,19 @@ class CalendarConfirmationTests(unittest.TestCase):
             ),
             "fixed",
         )
+
+    def test_linked_google_task_is_not_repeated_as_all_day_task(self):
+        standalone = calendar_functions["standalone_google_tasks"]
+        tasks = [
+            {"task_list_id": "list-1", "task_id": "task-1"},
+            {"task_list_id": "list-1", "task_id": "task-2"},
+        ]
+        events = [{
+            "source": "linked_google_task",
+            "task_list_id": "list-1",
+            "task_id": "task-1",
+        }]
+        self.assertEqual(standalone(tasks, events), [tasks[1]])
 
 
 if __name__ == "__main__":
