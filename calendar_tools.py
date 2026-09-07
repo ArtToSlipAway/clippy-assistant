@@ -139,6 +139,34 @@ def classify_planning_event(
     ):
         return "adjustable"
 
+    # Personal appointments remain fixed even when their description also
+    # contains a project keyword, for example a video shoot for T-Start.
+    fixed_prefixes = (
+        "встреча ",
+        "встреча с ",
+        "созвон ",
+        "звонок ",
+        "запись на ",
+    )
+
+    if title_lower.startswith(fixed_prefixes):
+        return "fixed"
+
+    # This project name was created before task-link metadata was added.
+    # Treat only a task whose title starts with it as flexible; a meeting
+    # mentioning the same project is caught by the fixed prefixes above.
+    flexible_prefixes = (
+        "т-старт",
+        "т‑старт",
+        "т старт",
+        "t-start",
+        "t‑start",
+        "t start",
+    )
+
+    if title_lower.startswith(flexible_prefixes):
+        return "flexible"
+
     flexible_words = (
         "эскиз",
         "скетч",

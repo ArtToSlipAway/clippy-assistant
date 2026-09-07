@@ -78,6 +78,25 @@ class CalendarConfirmationTests(unittest.TestCase):
             "fixed",
         )
 
+    def test_legacy_t_start_task_is_movable_without_metadata(self):
+        classify = calendar_functions["classify_existing_calendar_event"]
+        self.assertEqual(
+            classify(
+                "Личный",
+                "Т-Старт — снять видео и завершить анкету",
+                {},
+            ),
+            "flexible",
+        )
+        self.assertEqual(
+            classify(
+                "Личный",
+                "Встреча с Александром — съёмка видео Т-Старт",
+                {},
+            ),
+            "fixed",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
