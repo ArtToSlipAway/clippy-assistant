@@ -1,6 +1,10 @@
 import ast
+import sys
+import types
 import unittest
+from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 
 def load_functions(filename, names):
@@ -10,7 +14,7 @@ def load_functions(filename, names):
         for node in tree.body
         if isinstance(node, ast.FunctionDef) and node.name in names
     ]
-    namespace = {}
+    namespace = {"date": date}
     exec(compile(ast.Module(body=nodes, type_ignores=[]), filename, "exec"), namespace)
     return namespace
 
@@ -31,6 +35,10 @@ calendar_functions = load_functions(
         "classify_existing_calendar_event",
         "standalone_google_tasks",
     },
+)
+google_task_functions = load_functions(
+    "google_tasks_tools.py",
+    {"get_day_overview"},
 )
 
 
@@ -110,6 +118,24 @@ class CalendarConfirmationTests(unittest.TestCase):
             "task_id": "task-1",
         }]
         self.assertEqual(standalone(tasks, events), [tasks[1]])
+
+    def test_day_overview_uses_combined_schedule_once(self):
+        combined = [
+            {"title": "Timed", "all_day": False, "start_iso": "12:00"},
+            {"title": "Task", "all_day": True, "start_iso": ""},
+        ]
+        calendar_module = types.ModuleType("calendar_tools")
+        calendar_module.get_day_schedule = lambda _target: list(combined)
+
+        with patch.dict(sys.modules, {"calendar_tools": calendar_module}):
+            result = google_task_functions["get_day_overview"](
+                date(2026, 9, 8)
+            )
+
+        self.assertEqual(
+            [item["title"] for item in result],
+            ["Task", "Timed"],
+        )
 
 
 if __name__ == "__main__":
