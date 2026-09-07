@@ -2668,6 +2668,10 @@ def save_plan_proposal(
         item = {
             "type": action_type,
             "calendar_id": calendar_id,
+            "calendar_kind": str(
+                action.get("calendar_kind")
+                or ""
+            ).strip().lower(),
             "title": title,
             "description": (
                 action.get("description")
