@@ -1,4 +1,5 @@
 import ast
+import os
 import sys
 import types
 import unittest
@@ -14,7 +15,7 @@ def load_functions(filename, names):
         for node in tree.body
         if isinstance(node, ast.FunctionDef) and node.name in names
     ]
-    namespace = {"date": date, "timedelta": timedelta}
+    namespace = {"date": date, "timedelta": timedelta, "os": os}
     exec(compile(ast.Module(body=nodes, type_ignores=[]), filename, "exec"), namespace)
     return namespace
 
@@ -35,6 +36,7 @@ calendar_functions = load_functions(
         "_linked_google_task_meta",
         "classify_existing_calendar_event",
         "standalone_google_tasks",
+        "_plan_action_calendar_id",
     },
 )
 google_task_functions = load_functions(
@@ -44,6 +46,24 @@ google_task_functions = load_functions(
 
 
 class CalendarConfirmationTests(unittest.TestCase):
+    def test_explicit_personal_calendar_wins_over_tattoo_words_in_title(self):
+        route = calendar_functions["_plan_action_calendar_id"]
+
+        with patch.dict(
+            os.environ,
+            {
+                "GOOGLE_PERSONAL_CALENDAR_ID": "personal",
+                "GOOGLE_CALENDAR_ID": "tattoo",
+            },
+        ):
+            result = route({
+                "type": "create",
+                "calendar_kind": "personal",
+                "title": "Отрисовать эскиз к тату сеансу Кирилла",
+            })
+
+        self.assertEqual(result, "personal")
+
     def test_tattoo_sketch_searches_until_preferred_date(self):
         candidate_dates = bot_functions["_morning_candidate_dates"]
         namespace = candidate_dates.__globals__
