@@ -71,6 +71,7 @@ from project_next_actions import (
     set_project_action_status,
 )
 from nightly_project_sync import (
+    TATTOO_ACTION_SOURCE,
     nightly_sync_is_due,
     sync_calendar_projects,
 )
@@ -2728,7 +2729,9 @@ def _build_morning_project_proposal(
             )
         )
 
-        if preferred_date:
+        # For calendar-backed sketches, preferred_date orders urgency;
+        # preparation can start as soon as the session is discovered.
+        if preferred_date and action.get("source_chat") != TATTOO_ACTION_SOURCE:
             try:
                 preferred = (
                     date.fromisoformat(
