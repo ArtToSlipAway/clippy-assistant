@@ -1,11 +1,14 @@
 import ast
+import json
 import os
 import sys
+import tempfile
 import types
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 
 def load_functions(filename, names):
@@ -37,6 +40,7 @@ calendar_functions = load_functions(
         "classify_existing_calendar_event",
         "standalone_google_tasks",
         "_plan_action_calendar_id",
+        "save_plan_proposal",
     },
 )
 google_task_functions = load_functions(
@@ -46,6 +50,48 @@ google_task_functions = load_functions(
 
 
 class CalendarConfirmationTests(unittest.TestCase):
+    def test_saved_plan_keeps_explicit_personal_calendar_kind(self):
+        save = calendar_functions["save_plan_proposal"]
+        namespace = save.__globals__
+
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            os.environ,
+            {
+                "GOOGLE_PERSONAL_CALENDAR_ID": "personal",
+                "GOOGLE_CALENDAR_ID": "tattoo",
+            },
+        ):
+            proposal_path = Path(tmp) / "proposal.json"
+            namespace.update({
+                "json": json,
+                "datetime": datetime,
+                "TZ": ZoneInfo("Europe/Moscow"),
+                "PLAN_PROPOSAL_FILE": proposal_path,
+                "has_technical_ai_plan_prefix": lambda _title: False,
+                "clean_calendar_title": lambda title: title.strip(),
+                "_parse_input_datetime": datetime.fromisoformat,
+                "_plan_action_calendar_id": calendar_functions[
+                    "_plan_action_calendar_id"
+                ],
+            })
+
+            result = save(
+                "2099-09-08",
+                [{
+                    "type": "create",
+                    "calendar_kind": "personal",
+                    "title": "Отрисовать эскиз к тату сеансу Кирилла",
+                    "start": "2099-09-08T17:00:00+03:00",
+                    "end": "2099-09-08T19:00:00+03:00",
+                    "allow_ozon_overlap": True,
+                }],
+            )
+
+            saved = json.loads(proposal_path.read_text())
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(saved["actions"][0]["calendar_kind"], "personal")
+
     def test_explicit_personal_calendar_wins_over_tattoo_words_in_title(self):
         route = calendar_functions["_plan_action_calendar_id"]
 
