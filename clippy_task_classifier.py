@@ -27,6 +27,8 @@ def classify_task(title: str) -> dict:
         return {
             "type": "project",
             "plan": True,
+            "tracking": False,
+            "ignore": False,
         }
 
     data = json.loads(
@@ -35,11 +37,13 @@ def classify_task(title: str) -> dict:
 
     for rule in data.get("rules", []):
         if rule["match"] in title_lower:
+            task_type = rule.get(
+                "type",
+                "project",
+            )
+
             return {
-                "type": rule.get(
-                    "type",
-                    "project",
-                ),
+                "type": task_type,
                 "plan": rule.get(
                     "plan",
                     True,
@@ -48,9 +52,15 @@ def classify_task(title: str) -> dict:
                     "tracking",
                     False,
                 ),
+                "ignore": rule.get(
+                    "ignore",
+                    task_type == "ignore",
+                ),
             }
 
     return {
         "type": "project",
         "plan": True,
+        "tracking": False,
+        "ignore": False,
     }

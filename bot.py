@@ -1689,6 +1689,24 @@ def _morning_visible_events(
 
     for event in events:
 
+        if (
+            event.get("source")
+            in {
+                "google_tasks",
+                "linked_google_task",
+            }
+            and classify_task(
+                str(
+                    event.get("title")
+                    or ""
+                )
+            ).get(
+                "ignore",
+                False,
+            )
+        ):
+            continue
+
         # Google Tasks отображаются Calendar как
         # all-day строки. Если для этой же Task
         # существует linked timed block, показываем
