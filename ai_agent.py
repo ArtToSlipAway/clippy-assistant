@@ -110,6 +110,11 @@ Communication:
 - respond clearly and concisely;
 - use the user's language when possible;
 - accuracy takes priority over personality.
+
+Google Task modes:
+- schedule only tasks with clippy_plan=true;
+- treat clippy_tracking=true as observation-only and never create a Calendar block for it;
+- omit clippy_ignore=true tasks from plans, summaries and suggestions entirely.
 """
 
 
@@ -1362,6 +1367,10 @@ def _classify_google_task_items(task_items):
         item["clippy_plan"] = classification.get(
             "plan",
             True,
+        )
+        item["clippy_ignore"] = classification.get(
+            "ignore",
+            False,
         )
         classified_tasks.append(item)
 

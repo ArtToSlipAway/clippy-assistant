@@ -27,7 +27,7 @@
     },
     {
       "match": "трениров",
-      "type": "habit",
+      "type": "tracking",
       "plan": false,
       "tracking": true
     },
@@ -57,18 +57,47 @@
     },
     {
       "match": "сигар",
+      "type": "ignore",
+      "plan": false,
+      "tracking": false,
+      "ignore": true
+    },
+    {
+      "match": "курен",
+      "type": "ignore",
+      "plan": false,
+      "tracking": false,
+      "ignore": true
+    },
+    {
+      "match": "курить",
+      "type": "ignore",
+      "plan": false,
+      "tracking": false,
+      "ignore": true
+    },
+    {
+      "match": "никотин",
+      "type": "ignore",
+      "plan": false,
+      "tracking": false,
+      "ignore": true
+    },
+    {
+      "match": "вейп",
+      "type": "ignore",
+      "plan": false,
+      "tracking": false,
+      "ignore": true
+    },
+    {
+      "match": "анализ цел",
       "type": "tracking",
       "plan": false,
       "tracking": true
     },
     {
-      "match": "анализ целей",
-      "type": "tracking",
-      "plan": false,
-      "tracking": true
-    },
-    {
-      "match": "прогресс целей",
+      "match": "прогресс цел",
       "type": "tracking",
       "plan": false,
       "tracking": true
